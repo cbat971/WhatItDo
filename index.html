@@ -66,15 +66,19 @@
 
             // --- Firebase Initialization and Authentication ---
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-            const firebaseConfig = {
-                apiKey: "AIzaSyCb8qsgRE8CcChjliFalM71RwsA_AMFYJw",
-                authDomain: "what-it-do-995fc.firebaseapp.com",
-                projectId: "what-it-do-995fc",
-                storageBucket: "what-it-do-995fc.firebasestorage.app",
-                messagingSenderId: "254060483492",
-                appId: "1:254060483492:web:7f4657bbaff1dc28212731",
-                measurementId: "G-F7H7Q5ZD9L"
-            };
+            // Use Firebase Hosting injected config if available, else fallback to empty object
+            // __FIREBASE_CONFIG__ is injected by Firebase Hosting at deploy time
+            let firebaseConfig = {};
+            try {
+                if (typeof __FIREBASE_CONFIG__ !== 'undefined') {
+                    firebaseConfig = JSON.parse(__FIREBASE_CONFIG__);
+                } else if (typeof window !== 'undefined' && window.firebaseConfig) {
+                    firebaseConfig = window.firebaseConfig;
+                }
+            } catch (e) {
+                console.error('Failed to load Firebase config:', e);
+                firebaseConfig = {};
+            }
 
             // Initialize Firebase
             const app = initializeApp(firebaseConfig);
