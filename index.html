@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=2.0">
+    <title>What it do?</title>
+    <!-- Use Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            margin: 0;
+            min-height: 100vh;
+            width: 100vw;
+            height: 100vh;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- This is the container for the app -->
+    <div id="app-container" class="bg-gray-800 min-h-screen w-screen flex flex-col justify-start items-center text-center text-lg p-0 m-0 rounded-none shadow-none max-w-none">        <h1 class="text-3xl font-bold mb-2 text-yellow-300">What it do?</h1>
+
+        <!-- This is where the generated code will be shown, always visible -->
+        <div id="lobby-code-container" class="mb-2">
+            <p id="lobby-code-display" class="text-xl font-mono text-yellow-300"></p>
+        </div>
+        <!-- This div will contain the controls for hosting or joining a lobby -->
+        <div id="lobby-controls" class="space-y-4">
+            <!-- This button will be for hosting a new game -->
+            <button id="host-game-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                Host a New Game
+            </button>
+            <!-- These are the original elements for joining -->
+            <input type="text" id="lobby-id-input" placeholder="Enter lobby ID" class="w-full bg-gray-700 text-white placeholder-gray-400 border-gray-600 rounded-md py-2 px-4 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <button id="join-lobby-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors duration-200">
+                Join Lobby
+            </button>
+        </div>
+
+        <!-- This is where the cards will eventually be displayed -->
+        <div id="card-display" class="flex-1 w-full p-0 m-0 bg-gray-700 rounded-none flex flex-col justify-start items-center">            <div id="card-list" class="flex flex-row gap-2 overflow-x-auto pb-2 w-full max-w-full whitespace-nowrap justify-center items-start"></div>
+            <form id="add-card-form" class="mt-4 flex flex-row gap-2 justify-center">
+                <div class="relative w-full">
+                    <input type="text" id="card-name-input" autocomplete="off" placeholder="Enter card name" class="flex-1 w-full bg-gray-800 text-white placeholder-gray-400 border-gray-600 rounded-md py-2 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500" required />
+                    <ul id="autocomplete-list" class="absolute left-0 right-0 z-10 bg-gray-800 border border-gray-600 rounded-md mt-1 max-h-48 overflow-y-auto hidden"></ul>
+                </div>
+                <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold py-2 px-4 rounded-md transition-colors duration-200">Add Card</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Our JavaScript code goes here -->
+        <script type="module">
+            // Import the functions you need from the SDKs you need
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+            import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
+            import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+            import { getFirestore, doc, setDoc, collection, setLogLevel } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+            // Enable debug logging for Firestore
+            setLogLevel('Debug');
+
+            // --- Firebase Initialization and Authentication ---
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = {
+                apiKey: "AIzaSyCb8qsgRE8CcChjliFalM71RwsA_AMFYJw",
+                authDomain: "what-it-do-995fc.firebaseapp.com",
+                projectId: "what-it-do-995fc",
+                storageBucket: "what-it-do-995fc.firebasestorage.app",
+                messagingSenderId: "254060483492",
+                appId: "1:254060483492:web:7f4657bbaff1dc28212731",
+                measurementId: "G-F7H7Q5ZD9L"
+            };
+
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            const analytics = getAnalytics(app);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+            // Wait for the authentication state to be ready
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    console.log("Authentication successful! User ID:", user.uid);
+                    // Wait for DOM to be ready before initializing app logic
+                    if (document.readyState === 'loading') {
+                        window.addEventListener('DOMContentLoaded', () => initializeAppLogic(user.uid));
+                    } else {
+                        initializeAppLogic(user.uid);
+                    }
+                } else {
+                    // If there's no user, sign in
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                            console.log("Signed in with custom token.");
+                        } else {
+                            await signInAnonymously(auth);
+                            console.log("Signed in anonymously.");
+                        }
+                    } catch (error) {
+                        console.error("Authentication failed:", error);
+                    }
+                }
+            });
+
+            // --- Main Application Logic ---
+            function initializeAppLogic(userId) {
+                // Helper to show only the card area after joining/hosting
+                function showLobbyUI() {
+                    const lobbyControls = document.getElementById('lobby-controls');
+                    if (lobbyControls) lobbyControls.style.display = 'none';
+                    const cardDisplay = document.getElementById('card-display');
+                    if (cardDisplay) cardDisplay.style.display = '';
+                }
+                // Get references to our HTML elements
+                const hostButton = document.getElementById('host-game-btn');
+                const joinButton = document.getElementById('join-lobby-btn');
+                const lobbyInput = document.getElementById('lobby-id-input');
+                const codeDisplay = document.getElementById('lobby-code-display');
+                const addCardForm = document.getElementById('add-card-form');
+                const cardNameInput = document.getElementById('card-name-input');
+                const autocompleteList = document.getElementById('autocomplete-list');
+                let autocompleteTimeout = null;
+                // --- Autocomplete for Card Name ---
+                cardNameInput.addEventListener('input', async (e) => {
+                    const value = cardNameInput.value.trim();
+                    if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
+                    if (!value) {
+                        autocompleteList.innerHTML = '';
+                        autocompleteList.classList.add('hidden');
+                        return;
+                    }
+                    autocompleteTimeout = setTimeout(async () => {
+                        try {
+                            const resp = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(value)}`);
+                            if (!resp.ok) throw new Error('Autocomplete failed');
+                            const data = await resp.json();
+                            const suggestions = data.data || [];
+                            if (suggestions.length === 0) {
+                                autocompleteList.innerHTML = '';
+                                autocompleteList.classList.add('hidden');
+                                return;
+                            }
+                            autocompleteList.innerHTML = '';
+                            suggestions.forEach(suggestion => {
+                                const li = document.createElement('li');
+                                li.textContent = suggestion;
+                                li.className = 'px-4 py-2 cursor-pointer hover:bg-yellow-600 hover:text-gray-900';
+                                li.addEventListener('mousedown', (event) => {
+                                    event.preventDefault();
+                                    cardNameInput.value = suggestion;
+                                    autocompleteList.innerHTML = '';
+                                    autocompleteList.classList.add('hidden');
+                                    cardNameInput.focus();
+                                });
+                                autocompleteList.appendChild(li);
+                            });
+                            autocompleteList.classList.remove('hidden');
+                        } catch (err) {
+                            autocompleteList.innerHTML = '';
+                            autocompleteList.classList.add('hidden');
+                        }
+                    }, 200); // debounce
+                });
+                // Hide autocomplete on blur (with slight delay for click)
+                cardNameInput.addEventListener('blur', () => {
+                    setTimeout(() => {
+                        autocompleteList.innerHTML = '';
+                        autocompleteList.classList.add('hidden');
+                    }, 150);
+                });
+                // Track current lobby code
+                let currentLobbyCode = null;
+
+                // --- Function to generate a random lobby code ---
+                function generateLobbyCode() {
+                    const characters = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789!?@$%&*';
+                    let result = '';
+                    for (let i = 0; i < 3; i++) {
+                        result += characters.charAt(Math.floor(Math.random() * characters.length));
+                    }
+                    return result;
+                }
+
+                // --- Event listener for the Host button ---
+                hostButton.addEventListener('click', async () => {
+                    console.log("Host button clicked. Attempting to create a new lobby...");
+                    const lobbyCode = generateLobbyCode();
+
+                    // Construct the public data path for the lobbies collection
+                    const lobbiesCollectionRef = collection(db, `artifacts/${appId}/public/data/lobbies`);
+                    const newLobbyDocRef = doc(lobbiesCollectionRef, lobbyCode);
+
+                    const lobbyData = {
+                        createdAt: new Date(),
+                        hostId: userId,
+                        players: [userId],
+                        cards: []
+                    };
+
+                    try {
+                        // Set the document with the specific lobby code
+                        await setDoc(newLobbyDocRef, lobbyData);
+                        codeDisplay.textContent = `Lobby Code: ${lobbyCode}`;
+                        console.log(`Successfully created a new lobby with ID: ${lobbyCode}`);
+                        currentLobbyCode = lobbyCode;
+                        listenForCards(lobbyCode);
+                        showLobbyUI();
+                    } catch (error) {
+                        console.error("Error creating lobby:", error);
+                        codeDisplay.textContent = "Error creating lobby.";
+                    }
+                });
+
+                // --- Event listener for the Join button ---
+                joinButton.addEventListener('click', async () => {
+
+                    // Remove all spaces from the input
+                    const lobbyCode = lobbyInput.value.replace(/\s+/g, '').toUpperCase().trim();
+                    if (!lobbyCode) {
+                        codeDisplay.textContent = "Please enter a lobby code.";
+                        return;
+                    }
+
+                    // Reference to the lobby document
+                    const lobbyDocRef = doc(db, `artifacts/${appId}/public/data/lobbies`, lobbyCode);
+                    try {
+                        // Get the lobby document
+                        const lobbyDocSnap = await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js').then(m => m.getDoc(lobbyDocRef));
+                        if (!lobbyDocSnap.exists()) {
+                            codeDisplay.textContent = "Lobby not found.";
+                            return;
+                        }
+                        // Add user to players array if not already present
+                        const lobbyData = lobbyDocSnap.data();
+                        if (!lobbyData.players.includes(userId)) {
+                            await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js').then(m => m.updateDoc(lobbyDocRef, { players: m.arrayUnion(userId) }));
+                        }
+                        codeDisplay.textContent = `Joined Lobby: ${lobbyCode}`;
+                        console.log(`Successfully joined lobby: ${lobbyCode}`);
+                        currentLobbyCode = lobbyCode;
+                        listenForCards(lobbyCode);
+                        showLobbyUI();
+                    } catch (error) {
+                        console.error("Error joining lobby:", error);
+                        codeDisplay.textContent = "Error joining lobby.";
+                    }
+                });
+
+                // --- Add Card by Name ---
+                addCardForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const cardName = cardNameInput.value.trim();
+                    if (!cardName || !currentLobbyCode) return;
+                    cardNameInput.value = '';
+                    // Fetch card data from Scryfall
+                    try {
+                        const resp = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`);
+                        if (!resp.ok) throw new Error('Card not found');
+                        const card = await resp.json();
+                        // Add card to Firestore lobby cards array
+                        const lobbyDocRef = doc(db, `artifacts/${appId}/public/data/lobbies`, currentLobbyCode);
+                        await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js').then(m => m.updateDoc(lobbyDocRef, { cards: m.arrayUnion({
+                            id: card.id,
+                            name: card.name,
+                            image: card.image_uris?.normal || card.image_uris?.large || '',
+                            addedBy: userId,
+                            addedAt: new Date().toISOString()
+                        }) }));
+                    } catch (err) {
+                        alert('Card not found on Scryfall.');
+                    }
+                });
+
+                // --- Listen for Cards in Lobby ---
+                function listenForCards(lobbyCode) {
+                    const cardList = document.getElementById('card-list');
+                    const lobbyDocRef = doc(db, `artifacts/${appId}/public/data/lobbies`, lobbyCode);
+                    import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js').then(m => {
+                        m.onSnapshot(lobbyDocRef, (docSnap) => {
+                            cardList.innerHTML = '';
+                            const data = docSnap.data();
+                            if (data && Array.isArray(data.cards)) {
+                                data.cards.forEach(card => {
+                                    const cardDiv = document.createElement('div');
+                                    cardDiv.className = 'bg-gray-900 rounded-lg shadow-md p-3 flex flex-col items-center min-w-[210px] max-w-[220px]';
+                                    if (card.image) {
+                                        const img = document.createElement('img');
+                                        img.src = card.image;
+                                        img.alt = card.name;
+                                        img.className = 'w-48 h-64 object-cover rounded mb-3';
+                                        cardDiv.appendChild(img);
+                                    }
+                                    const name = document.createElement('div');
+                                    name.textContent = card.name;
+                                    name.className = 'text-yellow-300 font-bold text-lg text-center';
+                                    cardDiv.appendChild(name);
+                                    cardList.appendChild(cardDiv);
+                                });
+                            }
+                        });
+                    });
+                }
+            }
+    </script>
+</body>
+</html>
